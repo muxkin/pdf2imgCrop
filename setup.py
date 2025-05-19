@@ -4,6 +4,11 @@ setup(
     name="pdf2imgCrop",
     version="0.1.0",
     packages=find_packages(),
+    url="https://github.com/muxkin/pdf2imgCrop",
+    project_urls={
+        "Bug Tracker": "https://github.com/muxkin/pdf2imgCrop/issues",
+        "Source Code": "https://github.com/muxkin/pdf2imgCrop",
+    },
     install_requires=[
         "PyMuPDF",
         "Pillow",
