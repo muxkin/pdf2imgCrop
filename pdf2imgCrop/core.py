@@ -1,10 +1,14 @@
 import fitz
 from PIL import Image, ImageOps
 import os
+from typing import Iterable
 from tqdm import tqdm
 from fitz import Page
 
-def convert_pdf(file: str, dpi: int = 300, file_format: str = "jpg") -> None:
+
+def convert_pdf(
+    file: str, dpi: int = 300, file_format: str = "jpg", page: str = None
+) -> None:
     """
     将PDF文件转换为图片并自动裁剪空白边距
 
@@ -12,9 +16,32 @@ def convert_pdf(file: str, dpi: int = 300, file_format: str = "jpg") -> None:
         file (str): PDF文件路径
         dpi (int, optional): 输出图片的DPI. 默认为 300.
         file_format (str, optional): 输出图片格式 ('jpg' 或 'png'). 默认为 'jpg'.
+        page (str): 指定转换的页面编号. 默认为 None, 表示转换所有页面.
     """
+    panges_to_handle = []
+    if page is not None:
+        pg_list = page.split(",")
+        for pg in pg_list:
+            if "-" in pg:
+                start, end = map(int, pg.split("-"))
+                if start > end:
+                    raise ValueError(f"错误的页面范围: {pg}")
+            else:
+                try:
+                    int(pg)
+                except ValueError:
+                    raise ValueError(f"错误的页面编号: {pg}")
+            panges_to_handle.extend(
+                range(int(pg.split("-")[0]), int(pg.split("-")[-1]) + 1)
+            )
     doc = fitz.open(file)
-    for pg in tqdm(doc, desc="正在转换页面", unit="页"):
+    for pg_number, pg in enumerate(tqdm(doc, desc="正在转换页面", unit="页")):
+        if page is not None:
+            if isinstance(page, Iterable):
+                if pg.number not in page:
+                    continue
+            elif pg.number != page:
+                continue
         # 获取页面的宽高
         pg_width = pg.rect.width / 72  # in inch
         pg_height = pg.rect.height / 72  # in inch
@@ -52,5 +79,5 @@ def convert_pdf(file: str, dpi: int = 300, file_format: str = "jpg") -> None:
                 output_path,
                 dpi=(dpi, dpi),
             )
-    
+
     doc.close()
