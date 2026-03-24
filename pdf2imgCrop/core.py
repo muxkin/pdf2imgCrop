@@ -1,8 +1,89 @@
+import os
+
 import fitz
 from PIL import Image, ImageOps
-import os
-from tqdm import tqdm
 from fitz import Page
+from tqdm import tqdm
+
+IMAGE_FORMATS = {"jpg", "png", "webp", "avif"}
+
+
+def _get_output_dir(file: str) -> str:
+    filename, _ = os.path.splitext(file)
+    output_dir = filename + "output"
+    os.makedirs(output_dir, exist_ok=True)
+    return output_dir
+
+
+def _render_page_image(pg: Page, dpi: int) -> Image.Image:
+    pg_width = pg.rect.width / 72
+    pg_height = pg.rect.height / 72
+    pix_dpi_width = int(pg_width * dpi)
+    pix_dpi_height = int(pg_height * dpi)
+    zoom = 16
+    mat = fitz.Matrix(zoom, zoom).prerotate(0)
+    pix = pg.get_pixmap(matrix=mat, alpha=False)
+    img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
+    return img.resize((pix_dpi_width, pix_dpi_height), Image.Resampling.LANCZOS)
+
+
+def _get_content_bbox(img: Image.Image) -> tuple[int, int, int, int] | None:
+    img_inverse = ImageOps.invert(img)
+    return img_inverse.getbbox()
+
+
+def _save_cropped_image(
+    pg: Page, page_number: int, output_dir: str, dpi: int, file_format: str
+) -> None:
+    img = _render_page_image(pg, dpi)
+    bbox = _get_content_bbox(img)
+    if bbox is None:
+        cropped_img = img
+    else:
+        cropped_img = img.crop(bbox)
+    output_path = os.path.join(output_dir, f"{page_number + 1}.{file_format}")
+
+    if file_format == "jpg":
+        cropped_img.save(output_path, quality=95, dpi=(dpi, dpi))
+    elif file_format == "png":
+        cropped_img.save(output_path, dpi=(dpi, dpi))
+    elif file_format == "webp":
+        cropped_img.save(output_path, quality=95, method=6)
+    else:
+        cropped_img.save(output_path, quality=95)
+
+
+def _save_cropped_pdf(doc: fitz.Document, output_dir: str, file: str, dpi: int) -> None:
+    for page_number in tqdm(range(doc.page_count), desc="正在裁剪PDF页面", unit="页"):
+        pg = doc.load_page(page_number)
+        img = _render_page_image(pg, dpi)
+        bbox = _get_content_bbox(img)
+        if not bbox:
+            continue
+
+        page_rect = pg.rect
+        media_box = pg.mediabox
+        scale_x = page_rect.width / img.width
+        scale_y = page_rect.height / img.height
+        crop_rect = fitz.Rect(
+            page_rect.x0 + (bbox[0] * scale_x),
+            page_rect.y0 + (bbox[1] * scale_y),
+            page_rect.x0 + (bbox[2] * scale_x),
+            page_rect.y0 + (bbox[3] * scale_y),
+        )
+        crop_rect = fitz.Rect(
+            max(media_box.x0, crop_rect.x0),
+            max(media_box.y0, crop_rect.y0),
+            min(media_box.x1, crop_rect.x1),
+            min(media_box.y1, crop_rect.y1),
+        )
+        if not crop_rect.is_empty:
+            pg.set_cropbox(crop_rect)
+
+    filename = os.path.splitext(os.path.basename(file))[0]
+    output_path = os.path.join(output_dir, f"{filename}.pdf")
+    doc.save(output_path)
+
 
 def convert_pdf(file: str, dpi: int = 300, file_format: str = "jpg") -> None:
     """
@@ -11,46 +92,21 @@ def convert_pdf(file: str, dpi: int = 300, file_format: str = "jpg") -> None:
     Args:
         file (str): PDF文件路径
         dpi (int, optional): 输出图片的DPI. 默认为 300.
-        file_format (str, optional): 输出图片格式 ('jpg' 或 'png'). 默认为 'jpg'.
+        file_format (str, optional): 输出格式 ('jpg', 'png', 'webp', 'avif' 或 'pdf'). 默认为 'jpg'.
     """
+    file_format = file_format.lower()
+    output_dir = _get_output_dir(file)
     doc = fitz.open(file)
-    for pg in tqdm(doc, desc="正在转换页面", unit="页"):
-        # 获取页面的宽高
-        pg_width = pg.rect.width / 72  # in inch
-        pg_height = pg.rect.height / 72  # in inch
-        # 计算对应dpi对应的像素
-        pix_dpi_width = int(pg_width * dpi)
-        pix_dpi_height = int(pg_height * dpi)
-        zoom = 16
-        mat = fitz.Matrix(zoom, zoom).prerotate(0)
-        pix = pg.get_pixmap(matrix=mat, alpha=False)
+    try:
+        if file_format == "pdf":
+            _save_cropped_pdf(doc, output_dir, file, dpi)
+            return
 
-        # 准备输出目录
-        filename, _ = os.path.splitext(file)
-        output_dir = filename + "output"
-        if not os.path.exists(output_dir):
-            os.mkdir(output_dir)
+        if file_format not in IMAGE_FORMATS:
+            raise ValueError(f"Unsupported format: {file_format}")
 
-        # 裁剪空白区域
-        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-        # 将图片大小转为目标DPI大小
-        img = img.resize((pix_dpi_width, pix_dpi_height), Image.LANCZOS)
-        img_inverse = ImageOps.invert(img)
-        bbox = img_inverse.getbbox()
-        cropped_img = img.crop(bbox)
-
-        # 保存处理后的图片
-        output_path = os.path.join(output_dir, f"{pg.number + 1}.{file_format}")
-        if file_format.lower() == "jpg":
-            cropped_img.save(
-                output_path,
-                quality=95,
-                dpi=(dpi, dpi),
-            )
-        else:
-            cropped_img.save(
-                output_path,
-                dpi=(dpi, dpi),
-            )
-    
-    doc.close()
+        for page_number in tqdm(range(doc.page_count), desc="正在转换页面", unit="页"):
+            pg = doc.load_page(page_number)
+            _save_cropped_image(pg, page_number, output_dir, dpi, file_format)
+    finally:
+        doc.close()
