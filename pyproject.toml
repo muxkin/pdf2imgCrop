@@ -1,6 +1,6 @@
 [project]
 name = "pdf2imgCrop"
-version = "0.2.0"
+version = "0.2.2"
 description = "将PDF文件转换为图片并自动裁剪空白边距"
 readme = "README.md"
 authors = [
