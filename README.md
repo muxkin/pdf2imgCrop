@@ -5,10 +5,11 @@
 
 ## 功能特点
 
-- 将PDF文件输出为JPG、PNG、WebP或AVIF格式的图片
+- 将PDF文件输出为JPG、PNG、WebP、AVIF或TIF格式的图片
 - 支持直接裁剪并输出PDF文件
 - 自动裁剪图片周围的空白边距
 - 支持自定义DPI设置
+- 支持自定义 JPG 质量和 TIFF 压缩方式
 - 命令行界面，使用简单
 
 ## 安装
@@ -31,6 +32,10 @@ pdf2imgcrop your_file.pdf
 pdf2imgcrop your_file.pdf -d 600 -f png
 
 pdf2imgcrop your_file.pdf -d 600 -f pdf
+
+pdf2imgcrop your_file.pdf -f tif --tif-compression lzw
+
+pdf2imgcrop your_file.pdf -f jpg --jpg-quality 85
 ```
 
 查看帮助：
@@ -42,7 +47,9 @@ pdf2imgcrop --help
 
 - `file`: PDF文件路径（必需）
 - `-d`, `--dpi`: 输出图片的DPI（默认：300）
-- `-f`, `--format`: 输出格式，可选 `jpg`、`png`、`webp`、`avif` 或 `pdf`（默认：`jpg`）
+- `-f`, `--format`: 输出格式，可选 `jpg`、`png`、`webp`、`avif`、`tif` 或 `pdf`（默认：`jpg`）
+- `--jpg-quality`: JPG 输出质量，范围 `0-100`（默认：`95`）
+- `--tif-compression`: TIFF 压缩方式，可选 `none`、`lzw` 或 `jpeg`（默认：`lzw`）
 
 ## 代码示例
 
@@ -54,6 +61,12 @@ convert_pdf("your_file.pdf")
 
 # 自定义DPI和格式
 convert_pdf("your_file.pdf", dpi=600, file_format="png")
+
+# 自定义 JPG 质量
+convert_pdf("your_file.pdf", file_format="jpg", jpg_quality=85)
+
+# 以 LZW 压缩输出 TIFF
+convert_pdf("your_file.pdf", file_format="tif", tif_compression="lzw")
 
 # 直接裁剪并输出 PDF
 convert_pdf("your_file.pdf", dpi=600, file_format="pdf")
